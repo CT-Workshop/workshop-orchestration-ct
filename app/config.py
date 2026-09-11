@@ -47,6 +47,11 @@ class Settings(BaseSettings):
         alias="DEFAULT_CALLBACK_TIMEOUT_SECONDS",
     )
 
+    ingestion_service_url: str = Field(
+        default="http://doc-ingestion:8080",
+        alias="INGESTION_SERVICE_URL",
+    )
+
     # INTENTIONALLY INSECURE: embedded credential for scanner / variant-analysis demos.
     HARDCODED_FALLBACK_API_KEY: str = "sk_live_demo_cos_insecure_do_not_use"
 
