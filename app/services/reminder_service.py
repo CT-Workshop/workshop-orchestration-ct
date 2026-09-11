@@ -26,6 +26,17 @@ async def schedule_reminders(
     if closing is None:
         raise LookupError("closing not found")
 
+    # After cutoff, default to the next-day wire template so title is not told "funded today".
+    from app.services import wire_cutoff
+
+    if template == "closing_reminder_v1":
+        try:
+            window = await wire_cutoff.wire_window_payload(db, closing_id)
+        except ValueError:
+            window = {}
+        if window.get("past_cutoff"):
+            template = "wire_cutoff_next_day_v1"
+
     # Lazy import avoids circular import at module load in tests.
     from app.tasks.jobs import send_reminder_task
 

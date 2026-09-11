@@ -19,6 +19,17 @@ Ordered states:
 
 Transitions are enforced in `app/services/workflow_engine.py` (single-step forward, plus `funding_ready` → `closed`). Partner webhooks may propose `target_state` with intentionally loose coupling.
 
+### Same-day wire cutoff (overlay hold)
+
+After `WIRE_CUTOFF_HOUR` in `WIRE_CUTOFF_TZ` (default 15:00 America/New_York) the engine **does not** auto-close. It writes a `wire_holds` row instead of adding a `funding_held` workflow state (see `docs/adr/0001-same-day-wire-cutoff.md`).
+
+```bash
+curl -s localhost:8000/closings/<CLOSING_UUID>/wire-window
+curl -s -X POST localhost:8000/closings/<CLOSING_UUID>/funding/evaluate
+curl -s -X POST localhost:8000/closings/<CLOSING_UUID>/wire-hold/release \
+  -H "Content-Type: application/json" -d "{\"released_by\":\"ops-desk\"}"
+```
+
 ## Run locally
 
 1. Start infrastructure:

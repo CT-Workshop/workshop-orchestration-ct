@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import ClosingCase, FundingChecklist, WorkflowState
 from app.models.enums import ActorType
+from app.services import wire_cutoff
 from app.services.workflow_engine import apply_transition, get_closing_or_404
 
 
@@ -58,14 +59,18 @@ async def evaluate_funding_readiness(db: AsyncSession, closing_id: uuid.UUID) ->
             payload={"checklist_id": str(chk.id)},
         )
     elif all_cleared and closing.state == WorkflowState.FUNDING_READY.value:
-        await apply_transition(
-            db,
-            closing,
-            WorkflowState.CLOSED.value,
-            actor_type=ActorType.SYSTEM,
-            actor_id="funding_service",
-            payload={"checklist_id": str(chk.id)},
-        )
+        hold = await wire_cutoff.ensure_cutoff_hold(db, closing_id)
+        if hold is not None:
+            chk.evaluated_by = "funding_service_wire_hold"
+        else:
+            await apply_transition(
+                db,
+                closing,
+                WorkflowState.CLOSED.value,
+                actor_type=ActorType.SYSTEM,
+                actor_id="funding_service",
+                payload={"checklist_id": str(chk.id)},
+            )
 
     await db.flush()
     return chk
