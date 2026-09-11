@@ -1,9 +1,11 @@
 """
 Partner webhook ingestion.
 
-INTENTIONAL WEAKNESSES:
+INTENTIONAL WEAKNESS:
 - No HMAC / signature verification on ingest.
-- idempotency_key is persisted but duplicates are not rejected (replay).
+
+Replay is enforced: the same (partner_id, idempotency_key) returns the first row
+and does not apply a second workflow transition (ADR 0002).
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import ClosingCase, PartnerWebhookEvent, WorkflowState
 from app.models.enums import ActorType
+from app.services.partner_idempotency import find_existing_delivery
 from app.services.workflow_engine import apply_transition, get_closing_or_404
 
 logger = logging.getLogger(__name__)
@@ -30,7 +33,15 @@ async def ingest_partner_event(
     body: dict[str, Any],
     headers_snapshot: dict[str, Any] | None,
 ) -> PartnerWebhookEvent:
-    # DEMO: always accept — no signature gate.
+    # DEMO: still unsigned — authenticity is a follow-up. Replay is not.
+    key = body.get("idempotency_key")
+    if isinstance(key, str) and key.strip():
+        existing = await find_existing_delivery(
+            db, partner_id=partner_id, idempotency_key=key.strip()
+        )
+        if existing is not None:
+            return existing
+
     row = PartnerWebhookEvent(
         partner_id=partner_id,
         event_type=event_type,

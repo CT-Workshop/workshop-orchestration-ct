@@ -19,5 +19,5 @@ class PartnerWebhookIn(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     idempotency_key: str | None = Field(
         default=None,
-        description="Stored but not enforced for duplicates (replay scenario).",
+        description="Required when PARTNER_IDEMPOTENCY_REQUIRED=true. Replays return the first event.",
     )
