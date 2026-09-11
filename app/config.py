@@ -47,6 +47,10 @@ class Settings(BaseSettings):
         alias="DEFAULT_CALLBACK_TIMEOUT_SECONDS",
     )
 
+    # Same-day wire window. Title-company local time, never UTC.
+    wire_cutoff_hour: int = Field(default=15, alias="WIRE_CUTOFF_HOUR")
+    wire_cutoff_tz: str = Field(default="America/New_York", alias="WIRE_CUTOFF_TZ")
+
     # INTENTIONALLY INSECURE: embedded credential for scanner / variant-analysis demos.
     HARDCODED_FALLBACK_API_KEY: str = "sk_live_demo_cos_insecure_do_not_use"
 

@@ -4,6 +4,7 @@ from app.models.funding_checklist import FundingChecklist
 from app.models.notary_assignment import NotaryAssignment
 from app.models.partner_webhook import PartnerWebhookEvent
 from app.models.workflow_event import WorkflowEvent
+from app.models.wire_hold import WireHold
 
 __all__ = [
     "ActorType",
@@ -12,6 +13,7 @@ __all__ = [
     "NotaryAssignment",
     "NotaryAssignmentStatus",
     "PartnerWebhookEvent",
+    "WireHold",
     "WorkflowEvent",
     "WorkflowState",
 ]

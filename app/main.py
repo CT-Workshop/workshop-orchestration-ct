@@ -7,7 +7,7 @@ from fastapi import FastAPI
 
 from app.config import get_settings
 from app.database import init_db
-from app.routers import admin, closings, debug, webhooks
+from app.routers import admin, closings, debug, funding, webhooks
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,6 +35,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "service": settings.app_name}
 
     app.include_router(closings.router)
+    app.include_router(funding.router)
     app.include_router(webhooks.router)
     app.include_router(admin.router)
     app.include_router(debug.router)
