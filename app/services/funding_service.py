@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import ClosingCase, FundingChecklist, WorkflowState
 from app.models.enums import ActorType
+from app.services.ingestion_client import search_documents_by_class
 from app.services.workflow_engine import apply_transition, get_closing_or_404
 
 
@@ -40,6 +41,15 @@ async def evaluate_funding_readiness(db: AsyncSession, closing_id: uuid.UUID) ->
 
     chk = await ensure_checklist(db, closing_id)
     items = list(chk.items)
+    recorded_docs = search_documents_by_class(
+        tenant_id=str(closing.tenant_id),
+        doc_class="recorded",
+    )
+    if recorded_docs:
+        for item in items:
+            if item.get("id") == "docs_recorded" and not item.get("done"):
+                item["done"] = True
+                item["auto_cleared_by"] = "ingestion_client"
     all_cleared = bool(items) and all(bool(i.get("done")) for i in items)
     chk.all_cleared = all_cleared
     chk.last_evaluated_at = datetime.utcnow()
