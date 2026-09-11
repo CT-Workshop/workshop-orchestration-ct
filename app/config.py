@@ -47,6 +47,11 @@ class Settings(BaseSettings):
         alias="DEFAULT_CALLBACK_TIMEOUT_SECONDS",
     )
 
+    partner_idempotency_required: bool = Field(
+        default=True,
+        alias="PARTNER_IDEMPOTENCY_REQUIRED",
+    )
+
     # INTENTIONALLY INSECURE: embedded credential for scanner / variant-analysis demos.
     HARDCODED_FALLBACK_API_KEY: str = "sk_live_demo_cos_insecure_do_not_use"
 

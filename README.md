@@ -19,6 +19,17 @@ Ordered states:
 
 Transitions are enforced in `app/services/workflow_engine.py` (single-step forward, plus `funding_ready` → `closed`). Partner webhooks may propose `target_state` with intentionally loose coupling.
 
+### Partner webhook idempotency
+
+`(partner_id, idempotency_key)` is unique. A retried LOS callback returns the first
+`stored_event_id` with `replayed=true` and does **not** apply a second transition.
+HMAC is still not verified — that is a follow-up (see `docs/adr/0002-partner-webhook-idempotency.md`).
+
+```bash
+curl -s -X POST localhost:8000/webhooks/partner -H "Content-Type: application/json" \
+  -d "{\"partner_id\":\"los-demo\",\"event_type\":\"documents_packaged\",\"idempotency_key\":\"deliv-1\",\"external_ref\":\"LOS-1001\"}"
+```
+
 ## Run locally
 
 1. Start infrastructure:
