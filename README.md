@@ -17,7 +17,7 @@ Ordered states:
 
 `draft` → `docs_ready` → `borrower_review` → `signing_scheduled` → `signed` → `funding_ready` → `closed`
 
-Transitions are enforced in `app/services/workflow_engine.py` (single-step forward, plus `funding_ready` → `closed`). Partner webhooks may propose `target_state` with intentionally loose coupling.
+Transitions are enforced in `app/services/workflow_engine.py` (single-step forward, plus `funding_ready` → `closed`). Partner webhooks ignore client `target_state`; only mapped event types (`documents_packaged`, `borrower_acknowledged`) may advance early states. Signing, funding, and closure stay on notary / funding-checklist paths.
 
 ## Run locally
 
@@ -29,19 +29,31 @@ Transitions are enforced in `app/services/workflow_engine.py` (single-step forwa
 
 2. Configure environment — copy `.env.example` to `.env` and adjust if needed.
 
-3. Install dependencies (Python 3.11+ recommended):
+3. Install dependencies (Python 3.11+ recommended). Use the lockfile in CI and shared environments:
 
    ```bash
-   pip install -r requirements.txt
+   pip install -r requirements.lock
    ```
 
-4. Run API:
+   To refresh pins after editing `requirements.txt` or `requirements-dev.txt`:
+
+   ```bash
+   pip-compile --strip-extras --output-file=requirements.lock requirements-dev.txt
+   ```
+
+4. Apply schema migrations (do not rely on SQLAlchemy `create_all`):
+
+   ```bash
+   alembic upgrade head
+   ```
+
+5. Run API:
 
    ```bash
    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
 
-5. Run Celery worker (separate terminal):
+6. Run Celery worker (separate terminal):
 
    ```bash
    celery -A app.tasks.celery_app worker -l info
@@ -74,7 +86,7 @@ curl -s -X POST localhost:8000/webhooks/partner -H "Content-Type: application/js
 | GET | `/closings/{id}/status` | Aggregate status, assignments, funding snapshot, recent workflow events |
 | POST | `/closings/{id}/assign-notary` | Create `NotaryAssignment`; advances workflow toward signing |
 | POST | `/closings/{id}/reminders` | Enqueue borrower-facing reminder task |
-| POST | `/webhooks/partner` | Ingest unsigned LOS / CRM callbacks (`PartnerWebhookEvent`) |
+| POST | `/webhooks/partner` | Ingest LOS / CRM callbacks (`PartnerWebhookEvent`); `target_state` is ignored |
 | GET | `/admin/queue-status` | Celery inspect payload (**broken RBAC** — see below) |
 | GET | `/debug/config` | Exposes configuration (**unsafe**) |
 
@@ -113,9 +125,11 @@ Hardening checklist for real deployments: enforce webhook signatures with timest
 
 ```
 app/
-  main.py              # FastAPI app factory
+  main.py              # FastAPI app factory (schema via Alembic, not create_all)
   config.py            # Settings + deliberate insecure helpers
   database.py          # Async engine/session
+alembic/               # Migrations
+tests/                 # pytest suite (also run in .github/workflows/ci.yml)
   worker_db.py         # Sync session for Celery
   deps.py              # Auth helpers (flawed admin gate)
   models/              # SQLAlchemy models
