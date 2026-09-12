@@ -7,6 +7,8 @@ NO DOCUMENT HASH VERIFICATION:
 - `cos.evaluate_funding` (app/tasks/jobs.py) applies the same flag-only rule.
 - A partner `target_state` can still move funding_ready -> closed without this
   checklist (app/services/partner_webhook_service.py).
+- The ingestion service stores a `checksum_sha256` per upload; nothing in this
+  service reads or compares it.
 
 Do not cite a hash check as the reason a closing is safe; none runs here.
 """
