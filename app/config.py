@@ -39,6 +39,9 @@ class Settings(BaseSettings):
 
     admin_token: str = Field(default="", alias="ADMIN_TOKEN")
 
+    # org_id:secret pairs, comma-separated. Empty means closing APIs fail closed.
+    closing_tenant_keys: str = Field(default="", alias="CLOSING_TENANT_KEYS")
+
     # DEMO: duplicated secret — also embedded as fallback below for "works locally" demos.
     partner_webhook_secret: str = Field(default="", alias="PARTNER_WEBHOOK_SECRET")
 
