@@ -20,9 +20,9 @@ async def partner_webhook(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
-    Accept unsigned partner callbacks.
+    Accept partner callbacks.
 
-    INTENTIONALLY INSECURE: no signature verification; replays are stored as new rows.
+    Client-supplied target_state is stored but never applied.
     """
     headers_snapshot = {k: v for k, v in request.headers.items()}
     envelope = body.model_dump()

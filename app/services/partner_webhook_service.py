@@ -1,9 +1,9 @@
 """
 Partner webhook ingestion.
 
-INTENTIONAL WEAKNESSES:
-- No HMAC / signature verification on ingest.
-- idempotency_key is persisted but duplicates are not rejected (replay).
+HMAC / signature verification is out of scope.
+Client-supplied target_state is never applied. Unsigned callbacks cannot
+advance signing, funding, or closure; those states stay checklist-gated.
 """
 
 from __future__ import annotations
@@ -20,6 +20,27 @@ from app.models.enums import ActorType
 from app.services.workflow_engine import apply_transition, get_closing_or_404
 
 logger = logging.getLogger(__name__)
+
+_EVENT_TRANSITIONS: dict[str, tuple[str, str]] = {
+    "documents_packaged": (WorkflowState.DRAFT.value, WorkflowState.DOCS_READY.value),
+    "borrower_acknowledged": (
+        WorkflowState.DOCS_READY.value,
+        WorkflowState.BORROWER_REVIEW.value,
+    ),
+}
+
+
+def partner_driven_next_state(
+    event_type: str, current_state: str, target_state: str | None
+) -> str | None:
+    """Map known LOS event types only. Ignore caller-supplied target_state."""
+    allowed = _EVENT_TRANSITIONS.get(event_type)
+    if allowed is None:
+        return None
+    from_state, to_state = allowed
+    if current_state != from_state:
+        return None
+    return to_state
 
 
 async def ingest_partner_event(
@@ -48,44 +69,31 @@ async def ingest_partner_event(
         await db.flush()
         return row
 
-    target = body.get("target_state")
-    if isinstance(target, str) and target:
+    requested = body.get("target_state")
+    if isinstance(requested, str) and requested:
+        logger.warning(
+            "Ignoring partner target_state=%s partner_id=%s event_type=%s",
+            requested,
+            partner_id,
+            event_type,
+        )
+
+    next_state = partner_driven_next_state(event_type, closing.state, requested)
+    if next_state is not None:
         try:
             await apply_transition(
                 db,
                 closing,
-                target,
+                next_state,
                 actor_type=ActorType.PARTNER_WEBHOOK,
                 actor_id=partner_id,
-                payload={"event_type": event_type, "envelope": body},
+                payload={"event_type": event_type},
                 correlation_id=body.get("idempotency_key"),
             )
         except ValueError as exc:
             row.processing_error = str(exc)
             await db.flush()
             return row
-
-    # Convenience transitions for demo LOS events
-    if event_type == "documents_packaged":
-        if closing.state == WorkflowState.DRAFT.value:
-            await apply_transition(
-                db,
-                closing,
-                WorkflowState.DOCS_READY.value,
-                actor_type=ActorType.PARTNER_WEBHOOK,
-                actor_id=partner_id,
-                payload={"event_type": event_type},
-            )
-    elif event_type == "borrower_acknowledged":
-        if closing.state == WorkflowState.DOCS_READY.value:
-            await apply_transition(
-                db,
-                closing,
-                WorkflowState.BORROWER_REVIEW.value,
-                actor_type=ActorType.PARTNER_WEBHOOK,
-                actor_id=partner_id,
-                payload={"event_type": event_type},
-            )
 
     row.processed_ok = True
     await db.flush()
