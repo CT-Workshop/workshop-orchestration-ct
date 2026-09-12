@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import DateTime, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -13,10 +13,19 @@ class PartnerWebhookEvent(Base):
     """
     Inbound partner events.
 
-    INTENTIONAL WEAKNESS: no signature / replay columns enforced at write time.
+    Signature verification is out of scope. Duplicate deliveries are unique on
+    (partner_id, idempotency_key) when a key is present. raw_body may include
+    target_state; the ingest path must not apply it.
     """
 
     __tablename__ = "partner_webhook_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "partner_id",
+            "idempotency_key",
+            name="uq_partner_webhook_partner_idempotency",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
