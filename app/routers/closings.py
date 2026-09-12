@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.deps import ClosingActor, require_closing_actor
 from app.models import ClosingCase, FundingChecklist, NotaryAssignment, WorkflowEvent
 from app.schemas.closing import (
     AssignNotaryRequest,
@@ -20,10 +21,31 @@ from app.services import notary_service, reminder_service
 router = APIRouter(prefix="/closings", tags=["closings"])
 
 
+async def _closing_for_tenant(
+    db: AsyncSession,
+    closing_id: uuid.UUID,
+    actor: ClosingActor,
+) -> ClosingCase:
+    result = await db.execute(
+        select(ClosingCase).where(
+            ClosingCase.id == closing_id,
+            ClosingCase.lender_org_id == actor.lender_org_id,
+        )
+    )
+    closing = result.scalar_one_or_none()
+    if closing is None or closing.lender_org_id != actor.lender_org_id:
+        raise HTTPException(status_code=404, detail="Closing not found")
+    return closing
+
+
 @router.post("/create", status_code=201)
-async def create_closing(body: ClosingCreate, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+async def create_closing(
+    body: ClosingCreate,
+    db: AsyncSession = Depends(get_db),
+    actor: ClosingActor = Depends(require_closing_actor),
+) -> dict[str, Any]:
     row = ClosingCase(
-        lender_org_id=body.lender_org_id,
+        lender_org_id=actor.lender_org_id,
         title_company_id=body.title_company_id,
         external_ref=body.external_ref,
         borrower_display_name=body.borrower_display_name,
@@ -37,11 +59,12 @@ async def create_closing(body: ClosingCreate, db: AsyncSession = Depends(get_db)
 
 
 @router.get("/{closing_id}/status", response_model=ClosingStatusResponse)
-async def closing_status(closing_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> ClosingStatusResponse:
-    result = await db.execute(select(ClosingCase).where(ClosingCase.id == closing_id))
-    closing = result.scalar_one_or_none()
-    if closing is None:
-        raise HTTPException(status_code=404, detail="Closing not found")
+async def closing_status(
+    closing_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    actor: ClosingActor = Depends(require_closing_actor),
+) -> ClosingStatusResponse:
+    closing = await _closing_for_tenant(db, closing_id, actor)
 
     na_rows = (
         await db.execute(select(NotaryAssignment).where(NotaryAssignment.closing_id == closing.id))
@@ -104,11 +127,13 @@ async def assign_notary(
     closing_id: uuid.UUID,
     body: AssignNotaryRequest,
     db: AsyncSession = Depends(get_db),
+    actor: ClosingActor = Depends(require_closing_actor),
 ) -> dict[str, Any]:
+    closing = await _closing_for_tenant(db, closing_id, actor)
     try:
         na = await notary_service.assign_notary(
             db,
-            closing_id,
+            closing.id,
             body.notary_id,
             body.signing_agency_id,
             actor_id=body.notary_id,
@@ -120,9 +145,7 @@ async def assign_notary(
     await db.refresh(na)
 
     if body.trigger_los_sync:
-        result = await db.execute(select(ClosingCase).where(ClosingCase.id == closing_id))
-        closing = result.scalar_one_or_none()
-        if closing and closing.los_callback_url:
+        if closing.los_callback_url:
             from app.tasks.jobs import sync_los_callback_task
 
             sync_los_callback_task.delay(str(closing.id), closing.los_callback_url)
@@ -135,11 +158,13 @@ async def schedule_reminders(
     closing_id: uuid.UUID,
     body: ReminderRequest,
     db: AsyncSession = Depends(get_db),
+    actor: ClosingActor = Depends(require_closing_actor),
 ) -> dict[str, Any]:
+    closing = await _closing_for_tenant(db, closing_id, actor)
     try:
         return await reminder_service.schedule_reminders(
             db,
-            closing_id,
+            closing.id,
             channel=body.channel,
             template=body.template,
             schedule_in_seconds=body.schedule_in_seconds,
