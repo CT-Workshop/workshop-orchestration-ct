@@ -6,7 +6,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.config import get_settings
-from app.database import init_db
 from app.routers import admin, closings, debug, webhooks
 
 logging.basicConfig(level=logging.INFO)
@@ -17,7 +16,6 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info("Starting %s (%s)", settings.app_name, settings.environment)
-    await init_db()
     yield
     logger.info("Shutdown %s", settings.app_name)
 
