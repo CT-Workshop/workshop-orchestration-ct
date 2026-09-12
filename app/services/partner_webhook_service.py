@@ -21,6 +21,38 @@ from app.services.workflow_engine import apply_transition, get_closing_or_404
 
 logger = logging.getLogger(__name__)
 
+# Credential-bearing headers must never be persisted on webhook events.
+_SENSITIVE_HEADER_NAMES = frozenset(
+    {
+        "authorization",
+        "proxy-authorization",
+        "cookie",
+        "set-cookie",
+        "x-api-key",
+        "api-key",
+        "x-auth-token",
+        "x-csrf-token",
+        "x-webhook-secret",
+        "x-signature",
+        "x-hub-signature",
+        "x-hub-signature-256",
+    }
+)
+_REDACTED = "[REDACTED]"
+
+
+def sanitize_request_headers(headers: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Copy headers, replacing credential values with a placeholder."""
+    if headers is None:
+        return None
+    sanitized: dict[str, Any] = {}
+    for name, value in headers.items():
+        if str(name).lower() in _SENSITIVE_HEADER_NAMES:
+            sanitized[name] = _REDACTED
+        else:
+            sanitized[name] = value
+    return sanitized
+
 
 async def ingest_partner_event(
     db: AsyncSession,
@@ -36,7 +68,7 @@ async def ingest_partner_event(
         event_type=event_type,
         idempotency_key=body.get("idempotency_key"),
         raw_body=body,
-        headers_snapshot=headers_snapshot,
+        headers_snapshot=sanitize_request_headers(headers_snapshot),
         processed_ok=False,
     )
     db.add(row)
