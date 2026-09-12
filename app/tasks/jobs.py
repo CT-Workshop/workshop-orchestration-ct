@@ -96,10 +96,11 @@ def evaluate_funding_task(closing_id: str) -> dict:
 
         session.commit()
         return {"ok": True, "closing_id": closing_id, "all_cleared": all_cleared, "moved": moved}
-    except Exception as exc:  # noqa: BLE001
+    except Exception:
         logger.exception("funding evaluation failed")
         session.rollback()
-        return {"ok": False, "error": str(exc)}
+        # Re-raise so Celery records FAILURE and can retry; do not mask as a successful result.
+        raise
     finally:
         session.close()
 
