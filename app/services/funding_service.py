@@ -1,3 +1,16 @@
+"""
+Funding readiness gate: signed -> funding_ready -> closed.
+
+NO DOCUMENT HASH VERIFICATION:
+- Closing continues when every checklist item is `done`; `docs_recorded` is a
+  flag someone set, not a check of document content or hashes.
+- `cos.evaluate_funding` (app/tasks/jobs.py) applies the same flag-only rule.
+- A partner `target_state` can still move funding_ready -> closed without this
+  checklist (app/services/partner_webhook_service.py).
+
+Do not cite a hash check as the reason a closing is safe; none runs here.
+"""
+
 from __future__ import annotations
 
 import uuid
