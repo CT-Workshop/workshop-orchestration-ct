@@ -5,7 +5,10 @@ from pydantic import BaseModel, Field
 
 class PartnerWebhookIn(BaseModel):
     """
-    Inbound payload — intentionally permissive (unsigned / replay-friendly).
+    Inbound partner callback.
+
+    target_state is accepted for compatibility and persisted on the event
+    row; ingest never applies it as a workflow transition.
     """
 
     partner_id: str = Field(..., min_length=1, max_length=64)
@@ -14,10 +17,10 @@ class PartnerWebhookIn(BaseModel):
     closing_id: str | None = None
     target_state: str | None = Field(
         default=None,
-        description="Optional workflow transition hint.",
+        description="Ignored for transitions; signing/funding/closure stay checklist-gated.",
     )
     payload: dict[str, Any] = Field(default_factory=dict)
     idempotency_key: str | None = Field(
         default=None,
-        description="Stored but not enforced for duplicates (replay scenario).",
+        description="Unique with partner_id; retries return the original stored event.",
     )

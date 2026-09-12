@@ -106,7 +106,7 @@ async def assign_notary(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:
-        na = await notary_service.assign_notary(
+        na, replayed = await notary_service.assign_notary(
             db,
             closing_id,
             body.notary_id,
@@ -119,15 +119,24 @@ async def assign_notary(
     await db.commit()
     await db.refresh(na)
 
+    queued = False
     if body.trigger_los_sync:
         result = await db.execute(select(ClosingCase).where(ClosingCase.id == closing_id))
         closing = result.scalar_one_or_none()
         if closing and closing.los_callback_url:
+            from app.tasks.enqueue import enqueue_after_commit
             from app.tasks.jobs import sync_los_callback_task
 
-            sync_los_callback_task.delay(str(closing.id), closing.los_callback_url)
+            queued = enqueue_after_commit(
+                sync_los_callback_task, str(closing.id), closing.los_callback_url
+            )
 
-    return {"assignment_id": str(na.id), "status": na.status}
+    return {
+        "assignment_id": str(na.id),
+        "status": na.status,
+        "replayed": replayed,
+        "queued": queued,
+    }
 
 
 @router.post("/{closing_id}/reminders")
